@@ -4,7 +4,7 @@
 #define _CMAPI_SPEED_INCLUDE_
 
 /**
- * 用於控制電機的驅動方法
+ * 用於控制電機的速度數值的單位
  */
 typedef enum advanced_unit_type_e {
   SPEED_POINT = 0,
@@ -23,30 +23,59 @@ typedef enum speed_control_phase_type_e {
 /**
  * 齒輪組最大支持轉速
  */
-const short GEARSET_RED_MAX_RPM = 100, GEARSET_GREEN_MAX_RPM = 200,
+const short GEARSET_RED_MAX_RPM = 100,
+            GEARSET_GREEN_MAX_RPM = 200,
             GEARSET_BLUE_MAX_RPM = 600;
 
+
+constexpr double millivoltage(1);             // base unit
+constexpr double speedpoint = 12000.0 / 127;  // default unit
+constexpr double voltage = 1000;
+constexpr double rpm(1);  // base unit
+constexpr double rps = 60;
+
 /**
- * Speed variable bits:
+ * VEX V5 馬達能透過使用速度點(Speed Point)、毫伏(mV)以及每分鐘轉速(RPM)設置速度，其中每
+ * 種單位的上下限分別是
+ * - 速度點： +-127
+ * - 毫伏： +-12000
+ * - 每分鐘轉速： +-100(RED)  +-200(GREEN)  +-600(BLUE)
+ * 
+ * 根據慣例，我們一般使用速度點控制馬達。例如調用指令 `groupLeft.move(80);` 即代表設置速度
+ * 為 80sp，而函數宣告則是這樣：
+ * void motor_group::move(const short speed)
+ *                                    -----
+ *                                    ^
+ *                                    正常來說，這個函數只能支援輸入速度點，要輸入RPM，
+ *                                    便需要再次宣告 .move_rpm() 等類似的函數。
+ * 
+ * 為了支援輸入其他單位的速度而不需要再次宣告相似的函數，我們需要使用編碼速度(encoded speed)
+ * 
+ * 
+ * 編碼速度可以儲存在16 bit 的數字，速度單位的種類以二進制頭2至4個位作判定。
  *
  * 32768 12384 8192 4096 | 2048 1024 512 256 | 128 64 32 16 | 8 4 2 1
  *       <----------------------------------------------------------> millivolts
  *                              <-----------------------------------> rpm
- *                                             <--------------------> speed
- * point
+ *                                             <--------------------> speed point
  *
- * 1011 0??? ???? ???? rotate per minute
- * <--> must be 1011(+) or 0100(-)
+ * 01?? ???? ???? ???? 毫伏小於0
+ * <--> 必定是 0101 或 0110 或 0111
  *
- * 01?? ???? ???? ???? millivolts <0  min = *101000100100000 = -12000
- * <--> only 0101 or 0110  or 0111
- *
- * 10?? ???? ???? ???? millivolts >0  max = *010111011100000 = +12000
- * <--> only 1000 or 1001  or 1010
+ * 10?? ???? ???? ???? 毫伏大於0
+ * <--> 必定是 1000 或 1001 或 1010
+ * 
+ * 1011 0??? ???? ???? 每分鐘轉速
+ * <--> 必定是 1011(+) 或 0100(-)
  *
  * 0000 0000 ???? ???? speed point
- * <> must be all 0 or all 1
+ * <> 必定是全部 0 或者全部 1
+ * 
+ * 毫伏最小值 = [*101000100100000] = -12000
+ * 毫伏最大值 = [*010111011100000] = +12000
  *
+ * 支援二補數轉換：
+ * 
  * 1010111011100000+ mv
  * 0101000100011111
  * 0101000100100000-
@@ -58,17 +87,20 @@ const short GEARSET_RED_MAX_RPM = 100, GEARSET_GREEN_MAX_RPM = 200,
  * 0000000001111111+ point
  * 1111111110000000
  * 1111111110000001-
+ * 
+ * 有了這個編碼，我們便可以使用不同單位設置馬達的速度：
+ * groupLeft.move(80);
+ * groupLeft.move(80_pt);
+ * groupLeft.move(6000_mV);
+ * groupLeft.move(234_rpm);
+ * 
+ * 
+ * 這個類別用來解碼以及編碼速度數值，亦可以推算另一種單位的速度數值。
+ * 
  */
-
-constexpr double millivoltage(1);             // base unit
-constexpr double speedpoint = 12000.0 / 127;  // default unit
-constexpr double voltage = 1000;
-constexpr double rpm(1);  // base unit
-constexpr double rps = 60;
-
 class advanced_unit {
  private:
-  // 速度驅動類型
+  // 速度單位
   advanced_unit_type_e type_;
 
   // 速度點計算答案
@@ -83,6 +115,7 @@ class advanced_unit {
   // 正被速度控制的馬達的齒輪組
   pros::motor_gearset_e_t gearset_ = pros::E_MOTOR_GEARSET_INVALID;
 
+  // 解碼已編碼的速度
   void decode_(const short speed);
 
  public:
@@ -90,7 +123,7 @@ class advanced_unit {
    * 構造函數
    *
    * \param encoded
-   *        已編碼的速度變量
+   *        已編碼的速度
    */
   advanced_unit(const short encoded);
 
@@ -98,7 +131,7 @@ class advanced_unit {
    * 構造函數
    *
    * \param encoded
-   *        已編碼的速度變量
+   *        已編碼的速度
    * \param gearset
    *        正被速度控制的馬達的齒輪組
    */
@@ -110,7 +143,7 @@ class advanced_unit {
    * \param speed
    *        解碼的速度變量
    * \param type
-   *        速度驅動類型
+   *        速度單位類型
    */
   advanced_unit(const short speed, advanced_unit_type_e type);
 
@@ -136,12 +169,17 @@ class advanced_unit {
    */
   short to_rpm();
 
+  /**
+   * 根據原先儲存的單位類型，回傳所對應的數值
+   *
+   * \return 原始的數字
+   */
   short to_raw();
 
   /**
-   * 取得已編碼的速度變量
+   * 取得已編碼的速度
    *
-   * \return 已編碼的速度變量
+   * \return 已編碼的速度
    */
   short to_encoded();
 
@@ -153,8 +191,8 @@ class advanced_unit {
   advanced_unit_type_e get_type();
 
   /**
-   * 設置正被速度控制的馬達的齒輪組, 可以用來計算速度變量
-   * 比如你輸入了每分鐘轉速, 計算機可以通過齒輪組來計算電壓驅動速度.
+   * 設置正被速度控制的馬達的齒輪組, 可以用來計算其他單位的速度數值
+   * 比如你輸入了每分鐘轉速，則可以通過齒輪組來計算電壓驅動速度
    *
    * \param gearset
    *        正被速度控制的馬達的齒輪組
@@ -213,26 +251,70 @@ constexpr short operator"" _rps(unsigned long long int x) {
   return advanced_unit::encode_rpm(x * rps);
 }
 
+/**
+ * 此類別為一個速度控制階段，一般不會手動創建使用，能夠使用在指令上，以表示指令執行期間，馬達
+ * 的輸出和目前時間以及目標值之間的關係，例子： 
+ * 
+ * forward(80, 0_ms[0] >> 500_ms[60] >> -20_val[60] >> -10_val[30])
+ *                                                     -----------
+ *                                                     ^
+ *                                                     最後一個會被傳入指令
+ * 
+ * 意思指，向前行走80 cm。由開始30速度，至500毫秒加到60速度，直到剩餘距離20cm開始減速，至剩
+ * 餘距離10cm減到30速度，直至完結。
+ * 
+ * 各個階段之間的速度將會透過計算漸變到另一個階段，支援使用不同種類的速度單位，然而有所限制：
+ * 
+ * forward(80, 0_val[10] >> 50_val[60_pt] >> 100_val[12_v] >> 150_val[100_rpm])
+ *                   |------可能------|------可能------|-------不可能-------|
+ *                       原始SP到SP       SP到伏/毫伏        RPM和其他類型
+ * 
+ * 在這個例子，100cm到149cm會維持12伏輸出，直到到150cm立即改變到100_rpm。
+ * 
+ */
 class speed_phase {
  public:
   speed_control_phase_type_e_t type;
   long time = 0;     // ms
-  double value = 0;  // cm
-  short speed = 0;
+  double value = 0;  // tick
+  short speed = 0;   // encoded speed
 
-  speed_phase* previous = nullptr;
+  speed_phase* previous = nullptr; // linked list structure
 
   speed_phase(long ms, short speed)
       : type(TIME_PHASE), time(ms), speed(speed) {}
   speed_phase(double val, short speed)
       : type(VALUE_PHASE), value(val), speed(speed) {}
+
+  /**
+   * 計算馬達的輸出
+   *
+   * \param time
+   *        現在的時間
+   * \param value
+   *        現在的進度值
+   * \param time_end
+   *        目標時間，沒有設置則為 0
+   * \param value_end
+   *        目標進度，沒有設置則為 0
+   *
+   * \return 已編碼的速度
+   */
+  short get_output(long time, double value, 
+                   long time_end, double value_end);  // return speed
+
+  /**
+   * 增加一個控制階段，內部使用
+   */
   void add(speed_phase* phase);
+
+  /**
+   * Deep Clone 所有相關的控制階段
+   */
   speed_phase* clone();
 
-  short get_output(long time, double value, long time_end,
-                   double value_end);  // return speed
-
   speed_phase(const speed_phase& other);
+
   ~speed_phase();
 };
 

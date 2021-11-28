@@ -7,13 +7,13 @@ void advanced_unit::decode_(const short encoded) {
     short cache = (encoded & 0x07FF) << 5;
     rpm_ = cache >> 5;
     type_ = RPM;
-  } else if (f2 >> 2 == 0b01) {  //- mV
+  } else if (f2 >> 2 == 0b01) {  // - mV
     mV_ = encoded | 0x8000;
     type_ = MILLIVOLTS;
-  } else if (f2 >> 2 == 0b10) {  //+ mV
+  } else if (f2 >> 2 == 0b10) {  // + mV
     mV_ = encoded & 0x7FFF;
     type_ = MILLIVOLTS;
-  } else {  // speed point
+  } else {                       // speed point
     /*
     ­Ý®eoverflow ½d³ò +12383 ~ -12382
     */
