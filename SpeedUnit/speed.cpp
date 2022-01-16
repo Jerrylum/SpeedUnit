@@ -14,9 +14,10 @@ void advanced_unit::decode_(const short encoded) {
     mV_ = encoded & 0x7FFF;
     type_ = MILLIVOLTS;
   } else {                       // speed point
-    /*
-    ­Ý®eoverflow ½d³ò +12383 ~ -12382
-    */
+    /**
+     * @brief overflow range +12383 ~ -12382
+     * 
+     */
     point_ = encoded;
     if (encoded > 127) point_ = 127;
     if (encoded < -127) point_ = -127;
@@ -43,8 +44,8 @@ advanced_unit::advanced_unit(const short speed, advanced_unit_type_e type) {
     if (speed < -600) rpm_ = -600;
   } else if (type_ == MILLIVOLTS) {
     mV_ = speed;
-    if (speed > 120000) mV_ = 120000;
-    if (speed < -120000) mV_ = -120000;
+    if (speed > 12000) mV_ = 12000;
+    if (speed < -12000) mV_ = -12000;
   } else if (type_ == SPEED_POINT) {
     point_ = speed;
     if (speed > 127) point_ = 127;
@@ -107,24 +108,10 @@ void advanced_unit::set_gearset(const pros::motor_gearset_e_t gearset) {
 
 pros::motor_gearset_e_t advanced_unit::get_gearset() { return gearset_; }
 
-constexpr short advanced_unit::encode_millivoltage(short raw) {
-  short abs_raw = abs_const(raw);
-
-  if (abs_raw > 12000) abs_raw = 12000;
-  return ((abs_raw & 0xBFFF) | 0x8000) * sgn_nonzero(raw);
-}
-
-constexpr short advanced_unit::encode_rpm(short raw) {
-  short abs_raw = abs_const(raw);
-
-  if (abs_raw > 600) abs_raw = 600;
-  return ((abs_raw & 0x07FF) | 0xB000) * sgn_nonzero(raw);
-}
-
 void speed_phase::add(speed_phase* phase) { previous = phase; }
 
 speed_phase* speed_phase::clone() {
-  speed_phase* rtn = new speed_phase(0.2, 0);
+  speed_phase* rtn = new speed_phase(0);
   rtn->type = this->type;
   rtn->time = this->time;
   rtn->value = this->value;
@@ -213,11 +200,11 @@ speed_phase::speed_phase(const speed_phase& other) {
 }
 
 speed_phase time_target::operator[](short int speed) {
-  return speed_phase(ms, speed);
+  return speed_phase(TIME_PHASE, ms, 0, speed);
 }
 
 speed_phase value_target::operator[](short int speed) {
-  return speed_phase(val, speed);
+  return speed_phase(VALUE_PHASE, 0, val, speed);
 }
 
 time_target operator"" _ms(unsigned long long int x) { return time_target(x); }
