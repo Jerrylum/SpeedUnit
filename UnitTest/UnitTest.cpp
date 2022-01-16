@@ -123,6 +123,18 @@ namespace UnitTest
 			Assert::IsTrue(pros::E_MOTOR_GEARSET_36 == advanced_unit(127, GEARSET::RED).get_gearset());
 			Assert::IsTrue(pros::E_MOTOR_GEARSET_18 == advanced_unit(127, GEARSET::GREEN).get_gearset());
 			Assert::IsTrue(pros::E_MOTOR_GEARSET_06 == advanced_unit(127, GEARSET::BLUE).get_gearset());
+
+			Assert::AreEqual((short)-600, advanced_unit(-800, RPM).to_raw());
+			Assert::AreEqual((short)30, advanced_unit(30, RPM).to_raw());
+			Assert::AreEqual((short)600, advanced_unit(800, RPM).to_raw());
+
+			Assert::AreEqual((short)-12000, advanced_unit(-14000, MILLIVOLTS).to_raw());
+			Assert::AreEqual((short)30, advanced_unit(30, MILLIVOLTS).to_raw());
+			Assert::AreEqual((short)12000, advanced_unit(14000, MILLIVOLTS).to_raw());
+
+			Assert::AreEqual((short)-127, advanced_unit(-300, SPEED_POINT).to_raw());
+			Assert::AreEqual((short)30, advanced_unit(30, SPEED_POINT).to_raw());
+			Assert::AreEqual((short)127, advanced_unit(300, SPEED_POINT).to_raw());
 		}
 
 		TEST_METHOD(TestTargets) {
